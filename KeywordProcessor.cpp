@@ -121,8 +121,8 @@ void KeywordProcessor::create_cn_dict(const std::string& dir, const std::string&
 
 void KeywordProcessor::build_cn_index(const std::string& dict, const std::string& index)
 {
-    // 汉字 → 包含它的词序号集合 (用 set 保证序号不重复且有序)
-    std::map<std::string, std::set<int>> charToWordIDs;
+    // 汉字 → 包含该汉字的词语集合 (用 set 去重)
+    std::map<std::string, std::set<std::string>> charToWords;
 
     std::ifstream ifs(dict);
     std::string line;
@@ -133,11 +133,10 @@ void KeywordProcessor::build_cn_index(const std::string& dict, const std::string
         std::string word;
         int freq;
         if (!(iss >> wordId >> word >> freq)) {
-            continue;  // 格式不对，跳过
+            continue;
         }
 
         // 使用 utfcpp 将词语拆成单个汉字
-        // 先用 set 收集本词中的不重复汉字
         std::set<std::string> uniqueChars;
         const char* curr = word.c_str();
         const char* end  = word.c_str() + word.size();
@@ -145,22 +144,22 @@ void KeywordProcessor::build_cn_index(const std::string& dict, const std::string
             const char* start = curr;
             utf8::next(curr, end);
             std::string character(start, curr);
-            uniqueChars.insert(character);  // set 自动去重
+            uniqueChars.insert(character);
         }
 
-        // 将词序号加入每个不重复字符的索引
+        // 将词语本身加入每个不重复汉字的索引
         for (const auto& ch : uniqueChars) {
-            charToWordIDs[ch].insert(wordId);  // set 自动去重+排序
+            charToWords[ch].insert(word);
         }
     }
 
     // 写入索引文件
-    // 格式: <汉字> <词序号1> <词序号2> ...
+    // 格式: <汉字> <词语1> <词语2> ...
     std::ofstream ofs(index);
-    for (const auto& pair : charToWordIDs) {
-        ofs << pair.first;            // 汉字
-        for (int wid : pair.second) {
-            ofs << " " << wid;        // 词序号
+    for (const auto& pair : charToWords) {
+        ofs << pair.first;                // 汉字
+        for (const auto& w : pair.second) {
+            ofs << " " << w;              // 词语
         }
         ofs << "\n";
     }
