@@ -52,10 +52,15 @@ size_t Message::deserialize(const char* data, size_t len, Message& msg)
     return 5+msgLen;
 }
 
-SearchServer::SearchServer(EventLoop* loop, int port)
+SearchServer::SearchServer(EventLoop* loop, int port,
+                         const std::string& redisHost,
+                         int redisPort,
+                         int cacheCapacity,
+                         bool redisEnabled)
 :loop_(loop)
 ,server_(loop,InetAddress(static_cast<uint16_t>(port)),"SearchServer")
 ,totalDocs_(0)
+,cacheManager_(redisHost, redisPort, cacheCapacity, redisEnabled)
 {
     //加载停用词表
      std::ifstream stopFile("stopwords/cn_stopwords.txt");
@@ -268,6 +273,15 @@ void SearchServer::loadWebSearchData(){
 //   → 算编辑距离 → 排序(编辑距离 > 词频 > 字典序) → 取 topK
 std::string SearchServer::queryKeyword(const std::string& keyword, int topK){
 
+
+     // ----- 0. 查缓存 (key = "keyword:topK") -----
+    std::string cacheKey = keyword + ":" + std::to_string(topK);
+    std::string cachedResult;
+    if (cacheManager_.getKeywordCache(cacheKey, cachedResult)) {
+        std::cout << "[缓存命中] 关键字推荐: " << keyword << std::endl;
+        return cachedResult;
+    }
+
     // ----- 1. 把关键字拆成单个汉字 (用 utfcpp) -----
     std::vector<std::string> chars;
     const char* curr=keyword.c_str();
@@ -330,7 +344,9 @@ std::string SearchServer::queryKeyword(const std::string& keyword, int topK){
         json << "\"" << escaped << "\"";
     }
     json << "]";
-    return json.str();
+    std::string result = json.str();
+    cacheManager_.putKeywordCache(cacheKey, result);
+    return result;
 
 }
 
@@ -341,7 +357,13 @@ std::string SearchServer::queryKeyword(const std::string& keyword, int topK){
 
 std::string SearchServer::queryWebPages(const std::string& query, int topK){
 
-
+// ----- 0. 查缓存 (key = "query:topK") -----
+    std::string cacheKey = query + ":" + std::to_string(topK);
+    std::string cachedResult;
+    if (cacheManager_.getWebSearchCache(cacheKey, cachedResult)) {
+        std::cout << "[缓存命中] 网页搜索: " << query << std::endl;
+        return cachedResult;
+    }
     // ----- 1. 查询分词 + 去停用词 -----
     std::vector<std::string> queryWords;
     tokenizer_.Cut(query, queryWords);
@@ -484,7 +506,9 @@ auto escapeJson = [](std::string s) -> std::string {
              << ",\"abstract\":\"" << escapeJson(abstract) << "\"}";
     }
     json << "]";
-    return json.str();
+    std::string result = json.str();
+    cacheManager_.putWebSearchCache(cacheKey, result);
+    return result;
 
 }
 

@@ -9,6 +9,8 @@
 
 #include <cppjieba/Jieba.hpp> 
 
+#include "CacheManager.h"
+
 #include <muduo/net/TcpServer.h>
 #include <muduo/net/EventLoop.h>
 #include <muduo/net/InetAddress.h>
@@ -31,7 +33,11 @@ struct Message {
 class SearchServer {
 public:
  
-    SearchServer(muduo::net::EventLoop* loop,int port);
+   SearchServer(muduo::net::EventLoop* loop, int port,
+                 const std::string& redisHost = "127.0.0.1",
+                 int redisPort = 6379,
+                 int cacheCapacity = 10000,
+                 bool redisEnabled = true);
     ~SearchServer();
 
     void start();
@@ -87,6 +93,8 @@ private:
         //停用词集合
         std::set<std::string> stopWords_;
 
+         //第三期: 缓存管理器
+        CacheManager cacheManager_;
 };
 
 

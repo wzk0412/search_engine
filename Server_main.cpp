@@ -1,9 +1,10 @@
 #include "Server.h"
 #include <iostream>
 #include <cstdlib>
+#include <cstring>
 #include <signal.h>
 
-muduo::net::EventLoop* g_loop = nullptr;
+static muduo::net::EventLoop* g_loop = nullptr;
 
 void signalHandler(int sig)
 {
@@ -16,13 +17,19 @@ void signalHandler(int sig)
 
 int main(int argc, char* argv[])
 {
-    int port = 8888;
-    if (argc >= 2) {
-        port = std::atoi(argv[1]);
-        if (port <= 0 || port > 65535) {
-            std::cerr << "错误: 端口号必须在 1-65535 之间!" << std::endl;
-            return 1;
+    int  port = 8888;
+    bool redisEnabled = true;
+
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--no-redis") == 0) {
+            redisEnabled = false;
+        } else {
+            port = std::atoi(argv[i]);
         }
+    }
+    if (port <= 0 || port > 65535) {
+        std::cerr << "错误: 端口号必须在 1-65535 之间!" << std::endl;
+        return 1;
     }
 
     std::cout << "========================================" << std::endl;
@@ -41,8 +48,7 @@ int main(int argc, char* argv[])
 
     muduo::net::EventLoop loop;
     g_loop = &loop;
-
-    SearchServer server(&loop, port);
+    SearchServer server(&loop, port, "127.0.0.1", 6379, 10000, redisEnabled);
     server.start();
 
     loop.loop();
